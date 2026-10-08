@@ -17,4 +17,4 @@ Run the same installer again on the PC. Your company, users and messages are kep
 Your PC must be connected to the office network the first time you set it up.
 
 ---
-Version 0.2.0. SHA-256: `3f37ab73455a12307ab484ce6ed6901aa46f1773179dae450d2600d573ee59af`
+Version 0.2.1. SHA-256: `7caaddd90db71434731db82b0371e261f657d3d2467ca257e96ba744037df6e8`
