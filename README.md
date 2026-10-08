@@ -1,10 +1,14 @@
-# ComCom — Staff Installer
+# ComCom — Installer
 
-**[⬇ Download ComCom-Setup.exe](https://github.com/pashaintercorpservices-cyber/comcom-download/raw/main/ComCom-Setup.exe)** (Windows 10/11, about 98 MB)
+**Current version: 0.2.2** (adds: delete staff accounts). Check after downloading: right-click the file → Properties → size **97,492,140 bytes**.
+
+**[⬇ Download ComCom-Setup.exe](https://github.com/pashaintercorpservices-cyber/comcom-download/raw/main/ComCom-Setup.exe?v=0.2.2)** (Windows 10/11, about 98 MB)
 
 ## Already have ComCom? Upgrading
 
-Run the same installer again on the PC. Your company, users and messages are kept. **Upgrade the company host PC first.**
+Run the newly downloaded installer on the PC. Your company, users and messages are kept. **Upgrade the company host PC first.**
+
+Tip: your browser may save repeat downloads as `ComCom-Setup (1).exe`, `(2)`… — run the **newest** one (check the size above).
 
 ## Install on a staff PC
 
