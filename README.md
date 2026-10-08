@@ -1,6 +1,10 @@
 # ComCom — Staff Installer
 
-**[⬇ Download ComCom-Setup.exe](https://github.com/pashaintercorpservices-cyber/comcom-download/raw/main/ComCom-Setup.exe)** (Windows 10/11, about 97 MB)
+**[⬇ Download ComCom-Setup.exe](https://github.com/pashaintercorpservices-cyber/comcom-download/raw/main/ComCom-Setup.exe)** (Windows 10/11, about 98 MB)
+
+## Already have ComCom? Upgrading
+
+Run the same installer again on the PC. Your company, users and messages are kept. **Upgrade the company host PC first.**
 
 ## Install on a staff PC
 
@@ -13,4 +17,4 @@
 Your PC must be connected to the office network the first time you set it up.
 
 ---
-Version 0.1.0 (build 1). SHA-256: `d28a6d1bb4a97bf98282855f529feda41206cc943dee1e04d630d4b69307a83e`
+Version 0.2.0. SHA-256: `3f37ab73455a12307ab484ce6ed6901aa46f1773179dae450d2600d573ee59af`
