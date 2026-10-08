@@ -22,3 +22,15 @@ Your PC must be connected to the office network the first time you set it up.
 
 ---
 Version 0.2.2. SHA-256: `39a16e463f79d627b2cfff11066ac07f8a52b794cce3f7f0593f37972fd934d5`
+
+## Staff working from another location (remote access)
+
+Staff outside the office connect through a **ComCom Relay** on a small Linux server (VPS) that your company rents (about US$5/month, e.g. Hostinger KVM 1, Hetzner, DigitalOcean). The relay only passes encrypted traffic to the office host PC; it cannot read messages and stores nothing.
+
+1. Rent the smallest **Ubuntu 22.04/24.04** VPS. Allow TCP **443** and **7443** in the provider's firewall (if it has one).
+2. Log in to it (SSH or the provider's browser terminal) and run this one line:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/pashaintercorpservices-cyber/comcom-download/main/relay/install-relay.sh | sudo bash
+   ```
+3. It ends by printing a code starting with `comcom-relay:`. On the office host PC: **ComCom → Admin console → Remote access** → paste it → **Save**. Status turns **🟢 Connected**.
+4. Each remote staff member: the admin uses **Reset password** (or adds them) and sends the details by WhatsApp/email — the message now includes a `comcom:` connection code. They paste it under **Working outside the office?** → **Connect**, sign in, choose a password, and scan the QR code with an authenticator app (Google/Microsoft Authenticator).

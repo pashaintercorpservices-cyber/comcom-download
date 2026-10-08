@@ -1,0 +1,10 @@
+{
+  "name": "comcom-relay",
+  "version": "0.2.2",
+  "private": true,
+  "type": "module",
+  "description": "ComCom Relay: lets staff reach the office host PC from anywhere. Forwards encrypted traffic only.",
+  "scripts": { "start": "node index.js" },
+  "dependencies": { "selfsigned": "5.5.0" },
+  "engines": { "node": ">=22" }
+}
