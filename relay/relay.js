@@ -6,8 +6,14 @@
 // The relay never sees message content: the staff app's TLS session runs end
 // to end to the office host, whose certificate the app pins. The relay only
 // forwards encrypted bytes.
+//
+// One relay can serve many companies. Each company has its own token (its
+// office host proves it with that token) and its own address, such as
+// k3x9q2mf7a.relay.example.com; the relay reads only the server name from the
+// staff app's TLS ClientHello to know which office host to connect it to.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { isIP } from 'node:net';
 import net from 'node:net';
 import path from 'node:path';
 import tls from 'node:tls';
@@ -93,10 +99,171 @@ export async function loadRelayIdentity(dataDir) {
   return id;
 }
 
-export function createRelay({ identity, controlPort = 7443, clientPort = 443, host = '0.0.0.0', log = console.log, maxConnections = 1000 }) {
-  let control = null; // the office host's control connection
+// ---- reading the server name (SNI) from a TLS ClientHello ----
+
+// Returns undefined while more bytes are needed, null when the hello carries
+// no server name, or the lowercase name. Throws if this is not TLS.
+export function parseClientHelloSni(buf) {
+  // Gather the handshake bytes from as many TLS records as needed.
+  const parts = [];
+  let off = 0;
+  let have = 0;
+  let need = Infinity;
+  while (have < need) {
+    if (buf.length < off + 5) return undefined;
+    if (buf[off] !== 0x16) throw new Error('Not a TLS handshake');
+    const len = buf.readUInt16BE(off + 3);
+    if (buf.length < off + 5 + len) return undefined;
+    parts.push(buf.subarray(off + 5, off + 5 + len));
+    have += len;
+    off += 5 + len;
+    if (need === Infinity) {
+      const first = Buffer.concat(parts);
+      if (first.length < 4) continue;
+      if (first[0] !== 0x01) throw new Error('Not a ClientHello');
+      need = 4 + first.readUIntBE(1, 3);
+      if (need > 65536) throw new Error('ClientHello too large');
+    }
+  }
+  const h = Buffer.concat(parts).subarray(4, need);
+  let p = 34; // version + random
+  const skip = (n) => {
+    p += n;
+    if (p > h.length) throw new Error('Bad ClientHello');
+  };
+  skip(1 + h[p]); // session id
+  skip(2 + h.readUInt16BE(p)); // cipher suites
+  skip(1 + h[p]); // compression methods
+  if (p + 2 > h.length) return null; // no extensions
+  const end = Math.min(h.length, p + 2 + h.readUInt16BE(p));
+  p += 2;
+  while (p + 4 <= end) {
+    const type = h.readUInt16BE(p);
+    const len = h.readUInt16BE(p + 2);
+    p += 4;
+    if (type === 0 && p + 5 <= end) {
+      // server_name: list length, name type (0 = host name), name length, name
+      const nameLen = h.readUInt16BE(p + 3);
+      if (h[p + 2] === 0 && p + 5 + nameLen <= end) return h.subarray(p + 5, p + 5 + nameLen).toString('ascii').toLowerCase();
+      return null;
+    }
+    p += len;
+  }
+  return null;
+}
+
+// ---- companies served by this relay ----
+
+const ID_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+const newCompanyId = () => Array.from(crypto.randomBytes(10), (b) => ID_CHARS[b % 36]).join('');
+const tokenKey = (token) => crypto.createHash('sha256').update(String(token)).digest('base64url');
+
+// The list of companies lives in <dataDir>/companies.json. The relay operator
+// adds and removes companies with the command-line tool; the running relay
+// picks changes up through reload().
+export function openCompanyStore(dataDir) {
+  fs.mkdirSync(dataDir, { recursive: true });
+  const file = path.join(dataDir, 'companies.json');
+  let companies = [];
+  let byToken = new Map();
+  let byId = new Map();
+  let mtime = -1;
+
+  function reload() {
+    let stat;
+    try {
+      stat = fs.statSync(file);
+    } catch {
+      stat = null;
+    }
+    const m = stat ? stat.mtimeMs : 0;
+    if (m === mtime) return false;
+    mtime = m;
+    companies = stat ? JSON.parse(fs.readFileSync(file, 'utf8')).companies || [] : [];
+    byToken = new Map(companies.filter((c) => !c.disabled).map((c) => [tokenKey(c.token), c]));
+    byId = new Map(companies.filter((c) => !c.disabled).map((c) => [c.id, c]));
+    return true;
+  }
+  function save() {
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ companies }, null, 2), { mode: 0o600 });
+    fs.renameSync(tmp, file);
+    mtime = -1;
+    reload();
+  }
+  const find = (ref) => {
+    reload();
+    const r = String(ref || '').trim().toLowerCase();
+    return companies.find((c) => c.id === r) || companies.find((c) => c.name.toLowerCase() === r) || null;
+  };
+  reload();
+  return {
+    file,
+    reload,
+    list: () => (reload(), companies.map((c) => ({ ...c }))),
+    byToken: (token) => byToken.get(tokenKey(token)) || null,
+    byId: (id) => byId.get(id) || null,
+    find,
+    add(name) {
+      reload();
+      const n = String(name || '').trim().slice(0, 80);
+      if (!n) throw new Error('Give the company a name');
+      if (companies.some((c) => c.name.toLowerCase() === n.toLowerCase())) throw new Error(`"${n}" is already on this relay`);
+      const company = { id: newCompanyId(), name: n, token: crypto.randomBytes(32).toString('base64url'), createdAt: new Date().toISOString(), disabled: false };
+      companies.push(company);
+      save();
+      return { ...company };
+    },
+    setDisabled(ref, disabled) {
+      const c = find(ref);
+      if (!c) throw new Error(`No company "${ref}" on this relay`);
+      c.disabled = !!disabled;
+      save();
+      return { ...c };
+    },
+    remove(ref) {
+      const c = find(ref);
+      if (!c) throw new Error(`No company "${ref}" on this relay`);
+      companies = companies.filter((x) => x !== c);
+      save();
+      return { ...c };
+    },
+  };
+}
+
+// The address staff apps use for one company: <id>.<relay domain>. Without a
+// domain of its own, the relay's IP address is turned into a name through the
+// public sslip.io DNS service (k3x9q2mf7a.203-0-113-10.sslip.io -> 203.0.113.10).
+export function companyHostname(id, { domain, publicHost }) {
+  if (domain) return `${id}.${domain.replace(/^\*?\./, '')}`;
+  if (isIP(publicHost)) return `${id}.${publicHost.replace(/[.:]/g, '-')}.sslip.io`;
+  return `${id}.${publicHost}`;
+}
+
+export function companyCode(company, { publicHost, domain, controlPort, clientPort, fingerprint }) {
+  return encodeRelayCode({
+    v: 2, h: publicHost, p: controlPort, c: clientPort, t: company.token, f: fingerprint,
+    n: companyHostname(company.id, { domain, publicHost }),
+  });
+}
+
+// ---- the relay ----
+
+// `companies` is a company store (see openCompanyStore). Without one the relay
+// serves a single company whose token is identity.token, at any address.
+export function createRelay({
+  identity, companies = null, controlPort = 7443, clientPort = 443, host = '0.0.0.0', log = console.log,
+  maxConnections = 5000, perCompany = 500,
+}) {
+  const single = { id: 'default', name: 'default', token: identity.token };
+  const store = companies || {
+    byToken: (t) => (identity.token && safeEqual(t, identity.token) ? single : null),
+    byId: (id) => (id === single.id ? single : null),
+    reload: () => false,
+  };
+  const controls = new Map(); // company id -> { sock, token, name }
   let nextId = 1;
-  const pending = new Map(); // id -> { client, timer }
+  const pending = new Map(); // id -> { client, head, companyId, timer }
   const clients = new Set();
 
   const controlServer = tls.createServer({ key: identity.key, cert: identity.cert, handshakeTimeout: 10000 }, async (sock) => {
@@ -107,21 +274,23 @@ export function createRelay({ identity, controlPort = 7443, clientPort = 443, ho
     } catch {
       return sock.destroy();
     }
-    if (!safeEqual(hello.token, identity.token)) {
-      log('Rejected a connection with a wrong token');
+    store.reload();
+    const company = hello.token ? store.byToken(hello.token) : null;
+    if (!company) {
+      log('Rejected a connection with an unknown or disabled company code');
       return sock.destroy();
     }
-    if (hello.type === 'control') return attachControl(sock);
-    if (hello.type === 'data') return attachData(sock, Number(hello.id));
+    if (hello.type === 'control') return attachControl(sock, company, hello.token);
+    if (hello.type === 'data') return attachData(sock, company, Number(hello.id));
     sock.destroy();
   });
 
-  function attachControl(sock) {
-    if (control) control.destroy(); // the newest office host connection wins
-    control = sock;
+  function attachControl(sock, company, token) {
+    controls.get(company.id)?.sock.destroy(); // the newest office host connection wins
+    controls.set(company.id, { sock, token, name: company.name });
     sock.setKeepAlive(true, 15000);
     send(sock, { type: 'ok' });
-    log('Office host connected');
+    log(`Office host connected: ${company.name}`);
     let alive = true;
     const ping = setInterval(() => {
       if (!alive) return sock.destroy();
@@ -144,21 +313,22 @@ export function createRelay({ identity, controlPort = 7443, clientPort = 443, ho
     });
     sock.on('close', () => {
       clearInterval(ping);
-      if (control === sock) {
-        control = null;
-        log('Office host disconnected');
+      if (controls.get(company.id)?.sock === sock) {
+        controls.delete(company.id);
+        log(`Office host disconnected: ${company.name}`);
       }
     });
     sock.resume();
   }
 
-  function attachData(sock, id) {
+  function attachData(sock, company, id) {
     const entry = pending.get(id);
-    if (!entry) return sock.destroy();
+    if (!entry || entry.companyId !== company.id) return sock.destroy();
     pending.delete(id);
     clearTimeout(entry.timer);
-    const { client } = entry;
+    const { client, head } = entry;
     sock.setNoDelay(true);
+    sock.write(head); // the staff app's ClientHello, read to find the company
     client.pipe(sock);
     sock.pipe(client);
     const end = () => {
@@ -171,19 +341,52 @@ export function createRelay({ identity, controlPort = 7443, clientPort = 443, ho
     client.resume();
   }
 
-  const clientServer = net.createServer({ pauseOnConnect: true }, (client) => {
+  function route(client, head, name) {
+    const id = name ? name.split('.')[0] : null;
+    const company = (id && store.byId(id)) || (companies ? null : single);
+    const control = company && controls.get(company.id);
+    if (!control) return client.destroy();
+    let open = 0;
+    for (const c of clients) if (c.companyId === company.id) open++;
+    if (open > perCompany || pending.size > 500) return client.destroy();
+    client.companyId = company.id;
+    const id2 = nextId++;
+    const timer = setTimeout(() => {
+      pending.delete(id2);
+      client.destroy();
+    }, 10000);
+    pending.set(id2, { client, head, companyId: company.id, timer });
+    send(control.sock, { type: 'open', id: id2, ip: client.remoteAddress, port: client.remotePort });
+  }
+
+  const clientServer = net.createServer((client) => {
     client.on('error', () => {});
     clients.add(client);
     client.on('close', () => clients.delete(client));
-    if (!control || clients.size > maxConnections || pending.size > 200) return client.destroy();
+    if (clients.size > maxConnections || !controls.size) return client.destroy();
     client.setNoDelay(true);
-    const id = nextId++;
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      client.destroy();
-    }, 10000);
-    pending.set(id, { client, timer });
-    send(control, { type: 'open', id, ip: client.remoteAddress, port: client.remotePort });
+    // Read just the ClientHello to learn which company this is for.
+    let head = Buffer.alloc(0);
+    const timer = setTimeout(() => client.destroy(), 10000);
+    const onData = (chunk) => {
+      head = Buffer.concat([head, chunk]);
+      let name;
+      try {
+        name = parseClientHelloSni(head);
+      } catch {
+        clearTimeout(timer);
+        return client.destroy();
+      }
+      if (name === undefined) {
+        if (head.length > 70000) client.destroy();
+        return;
+      }
+      clearTimeout(timer);
+      client.off('data', onData);
+      client.pause();
+      route(client, head, name);
+    };
+    client.on('data', onData);
   });
 
   return {
@@ -193,10 +396,21 @@ export function createRelay({ identity, controlPort = 7443, clientPort = 443, ho
       return { controlPort: controlServer.address().port, clientPort: clientServer.address().port };
     },
     get hostConnected() {
-      return !!control;
+      return controls.size > 0;
+    },
+    isConnected: (companyId) => controls.has(companyId),
+    // After companies change: disconnect any whose access was removed.
+    refresh() {
+      store.reload();
+      for (const [id, c] of controls) {
+        if (store.byToken(c.token)?.id === id) continue;
+        c.sock.destroy();
+        for (const client of clients) if (client.companyId === id) client.destroy();
+        log(`Disconnected ${c.name}: removed or disabled on this relay`);
+      }
     },
     close() {
-      control?.destroy();
+      for (const c of controls.values()) c.sock.destroy();
       for (const c of clients) c.destroy();
       return Promise.all([
         new Promise((r) => controlServer.close(r)),

@@ -1,8 +1,8 @@
 # ComCom — Installer
 
-**Current version: 0.2.2** (adds: delete staff accounts). Check after downloading: right-click the file → Properties → size **97,492,140 bytes**.
+**Current version: 0.3.0** (adds: shared relay for remote staff of many companies; office address no longer shows Docker/WSL addresses). Check after downloading: right-click the file → Properties → size **97495950 bytes**.
 
-**[⬇ Download ComCom-Setup.exe](https://github.com/pashaintercorpservices-cyber/comcom-download/raw/main/ComCom-Setup.exe?v=0.2.2)** (Windows 10/11, about 98 MB)
+**[⬇ Download ComCom-Setup.exe](https://github.com/pashaintercorpservices-cyber/comcom-download/raw/main/ComCom-Setup.exe?v=0.3.0)** (Windows 10/11, about 98 MB)
 
 ## Already have ComCom? Upgrading
 
@@ -25,12 +25,27 @@ Version 0.2.2. SHA-256: `39a16e463f79d627b2cfff11066ac07f8a52b794cce3f7f0593f379
 
 ## Staff working from another location (remote access)
 
-Staff outside the office connect through a **ComCom Relay** on a small Linux server (VPS) that your company rents (about US$5/month, e.g. Hostinger KVM 1, Hetzner, DigitalOcean). The relay only passes encrypted traffic to the office host PC; it cannot read messages and stores nothing.
+Staff outside the office connect through a **ComCom Relay**: a small Linux server (VPS) that passes encrypted traffic to each company's office host PC. It cannot read messages and stores nothing.
 
-1. Rent the smallest **Ubuntu 22.04/24.04** VPS. Allow TCP **443** and **7443** in the provider's firewall (if it has one).
-2. Log in to it (SSH or the provider's browser terminal) and run this one line:
+**One relay serves many companies.** Run one relay and give each client company its own code; they don't need servers of their own. Companies can't see or reach each other. **Everyone (host and staff PCs) needs ComCom 0.3.0 or newer.**
+
+### Set up the relay (once, about 10 minutes)
+1. Rent the smallest **Ubuntu 24.04** VPS (e.g. Hostinger KVM 1). If the provider has a firewall setting, allow TCP **443** and **7443**.
+2. Open its terminal (Hostinger: **Browser terminal**; or `ssh root@<VPS IP>` in PowerShell) and run, with your first company's name:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/pashaintercorpservices-cyber/comcom-download/main/relay/install-relay.sh | sudo bash
+   curl -fsSL https://raw.githubusercontent.com/pashaintercorpservices-cyber/comcom-download/main/relay/install-relay.sh | sudo bash -s -- "InterManagement"
    ```
-3. It ends by printing a code starting with `comcom-relay:`. On the office host PC: **ComCom → Admin console → Remote access** → paste it → **Save**. Status turns **🟢 Connected**.
-4. Each remote staff member: the admin uses **Reset password** (or adds them) and sends the details by WhatsApp/email — the message now includes a `comcom:` connection code. They paste it under **Working outside the office?** → **Connect**, sign in, choose a password, and scan the QR code with an authenticator app (Google/Microsoft Authenticator).
+3. It prints that company's code, starting with `comcom-relay:`, and checks that the company address works.
+
+### Add a client company (each one gets its own code)
+In the VPS terminal:
+```bash
+comcom-relay add "Client Company Name"
+```
+Other commands: `comcom-relay list`, `comcom-relay code <company>` (show a code again), `comcom-relay disable <company>` / `enable <company>` (e.g. unpaid subscription), `comcom-relay remove <company>`.
+
+### In each company
+1. On the office host PC: **ComCom → Admin console → Remote access** → paste the company's code → **Save**. Status turns **🟢 Connected**.
+2. For each remote staff member, the admin uses **Reset password** (or adds them) and sends the details by WhatsApp/email. The message includes a `comcom:` connection code. The staff member pastes it under **Working outside the office?** → **Connect**, signs in, chooses a password and scans the QR code with an authenticator app (Google/Microsoft Authenticator).
+
+Company addresses use the free sslip.io DNS service by default. To use your own domain instead, add a DNS record `*.relay.yourdomain.com` → VPS IP, and put `RELAY_DOMAIN=relay.yourdomain.com` before `bash` in the install line (re-running the installer keeps existing companies).
