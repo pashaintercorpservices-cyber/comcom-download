@@ -1,8 +1,8 @@
 # ComCom — Installer
 
-**Current version: 0.3.0** (adds: shared relay for remote staff of many companies; office address no longer shows Docker/WSL addresses). Check after downloading: right-click the file → Properties → size **97,495,950 bytes**.
+**Current version: 0.3.1** (adds: version shown in the top-right corner and one-click updates; shared relay for many companies). Check after downloading: right-click the file → Properties → size **97499688 bytes**.
 
-**[⬇ Download ComCom-Setup.exe](https://github.com/pashaintercorpservices-cyber/comcom-download/raw/main/ComCom-Setup.exe?v=0.3.0)** (Windows 10/11, about 98 MB)
+**[⬇ Download ComCom-Setup.exe](https://github.com/pashaintercorpservices-cyber/comcom-download/raw/main/ComCom-Setup.exe?v=0.3.1)** (Windows 10/11, about 98 MB)
 
 ## Already have ComCom? Upgrading
 
@@ -22,6 +22,12 @@ Your PC must be connected to the office network the first time you set it up.
 
 ---
 Version 0.2.2. SHA-256: `39a16e463f79d627b2cfff11066ac07f8a52b794cce3f7f0593f37972fd934d5`
+
+## Updating ComCom
+
+From version 0.3.1 on, ComCom checks for new versions by itself. When one is published, a green **⬆ Update available** button appears at the top right, next to the version number. Click it → **Update now**: ComCom downloads the update, checks it, installs it and reopens. Messages and settings are kept. (Windows may ask for permission: choose **Yes**.) Update the company host PC first, then staff PCs.
+
+PCs on 0.3.0 or older need this download installed once by hand.
 
 ## Staff working from another location (remote access)
 
