@@ -1,6 +1,6 @@
 # ComCom — Installer
 
-**Current version: 0.3.0** (adds: shared relay for remote staff of many companies; office address no longer shows Docker/WSL addresses). Check after downloading: right-click the file → Properties → size **97495950 bytes**.
+**Current version: 0.3.0** (adds: shared relay for remote staff of many companies; office address no longer shows Docker/WSL addresses). Check after downloading: right-click the file → Properties → size **97,495,950 bytes**.
 
 **[⬇ Download ComCom-Setup.exe](https://github.com/pashaintercorpservices-cyber/comcom-download/raw/main/ComCom-Setup.exe?v=0.3.0)** (Windows 10/11, about 98 MB)
 
