@@ -1,6 +1,6 @@
 # ComCom — Installer
 
-**Current version: 0.3.1** (adds: version shown in the top-right corner and one-click updates; shared relay for many companies). Check after downloading: right-click the file → Properties → size **97499688 bytes**.
+**Current version: 0.3.1** (adds: version shown in the top-right corner and one-click updates; shared relay for many companies). Check after downloading: right-click the file → Properties → size **97,499,688 bytes**.
 
 **[⬇ Download ComCom-Setup.exe](https://github.com/pashaintercorpservices-cyber/comcom-download/raw/main/ComCom-Setup.exe?v=0.3.1)** (Windows 10/11, about 98 MB)
 
